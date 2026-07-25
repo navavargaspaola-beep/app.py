@@ -15,7 +15,7 @@ import streamlit as st
 # CONFIGURACIÓN DE PÁGINA Y ESTILO
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Plataforma Avanzada de Análisis de Datos",
+    page_title="Plataforma de Análisis de Datos",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
