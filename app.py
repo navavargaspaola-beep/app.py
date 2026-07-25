@@ -284,6 +284,7 @@ elif modulo == "🔍 Análisis & Perfil":
 # ---------------------------------------------------------
 # MÓDULO 3: PREDICTIVE ENGINE CON EVALUACIÓN COMPLETA
 # ---------------------------------------------------------
+
 elif modulo == "🤖 Modelo Predictivo":
     st.subheader("🤖 Modelado Predictivo de Machine Learning")
 
@@ -291,7 +292,16 @@ elif modulo == "🤖 Modelo Predictivo":
 
     with col_config:
         st.markdown("#### Configuración del Modelo")
-        target_var = st.selectbox("Variable Objetivo (Target)", df.columns)
+        
+        # Filtrar columnas que no sean identificadores únicos (IDs / Nombres de cliente)
+        posibles_targets = [
+            c for c in df.columns if df[c].nunique() < (len(df) * 0.8) or np.issubdtype(df[c].dtype, np.number)
+        ]
+        
+        if not posibles_targets:
+            posibles_targets = list(df.columns)
+
+        target_var = st.selectbox("Variable Objetivo (Target)", posibles_targets)
         test_size = st.slider("Proporción de Test (%)", 10, 40, 20) / 100
 
         btn_train = st.button("🚀 Entrenar Modelo", use_container_width=True)
@@ -300,7 +310,12 @@ elif modulo == "🤖 Modelo Predictivo":
         if btn_train:
             df_ml = df.copy()
 
-            # Detección del tipo de tarea (Clasificación vs Regresión)
+            # Advertencia si la variable tiene demasiadas categorías
+            if df_ml[target_var].nunique() > 50 and (df_ml[target_var].dtype == "object" or isinstance(df_ml[target_var].dtype, pd.CategoricalDtype)):
+                st.error("⚠️ La variable seleccionada tiene demasiadas categorías únicas (es probable que sea un ID o Nombre). Selecciona una variable con menos categorías.")
+                st.stop()
+
+            # Detección del tipo de tarea
             is_class = (
                 df_ml[target_var].dtype == "object"
                 or isinstance(df_ml[target_var].dtype, pd.CategoricalDtype)
@@ -336,17 +351,25 @@ elif modulo == "🤖 Modelo Predictivo":
                 st.success(f"**Modelo de {model_type}**")
                 st.metric("Precisión (Accuracy)", f"{acc*100:.2f}%")
 
-                # Matriz de Confusión
+                # Matriz de Confusión Segura
                 st.write("#### 🎯 Matriz de Confusión")
                 cm = confusion_matrix(y_test, preds)
-                labels = le_target.classes_ if le_target else np.unique(y)
+                
+                # Obtener etiquetas dinámicas seguras para evitar errores de dimensión
+                unique_labels_encoded = np.unique(np.concatenate((y_test, preds)))
+                if le_target is not None:
+                    labels_str = le_target.inverse_transform(unique_labels_encoded)
+                else:
+                    labels_str = [str(l) for l in unique_labels_encoded]
+
                 fig_cm = px.imshow(
                     cm,
-                    x=labels,
-                    y=labels,
+                    x=labels_str,
+                    y=labels_str,
                     text_auto=True,
-                    labels=dict(x="Predicción", y="Real"),
+                    labels=dict(x="Predicción", y="Valor Real"),
                     color_continuous_scale="Blues",
+                    template="plotly_white"
                 )
                 st.plotly_chart(fig_cm, use_container_width=True)
 
