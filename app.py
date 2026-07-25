@@ -1,3 +1,4 @@
+import io
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -5,7 +6,7 @@ import plotly.graph_objects as go
 from scipy import stats
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest, RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, r2_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 import streamlit as st
@@ -14,13 +15,12 @@ import streamlit as st
 # CONFIGURACIÓN DE PÁGINA Y ESTILO
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Plataforma de Analisis de Datos",
+    page_title="Plataforma Avanzada de Análisis de Datos",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# CSS Personalizado para tarjetas ejecutivas
 st.markdown(
     """
     <style>
@@ -39,13 +39,34 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("🛡️ Plataforma de Analisis de Datos")
+st.title("🛡️ Plataforma Avanzada de Análisis de Datos")
 st.caption(
-    "Sistema de Analítica Avanzada, Diagnóstico Prescriptivo y Gestión de Riesgos"
+    "Sistema Integral de Analítica, Diagnóstico Prescriptivo, Riesgos e Inferencia Estadística"
 )
 
 # ---------------------------------------------------------
-# 1. SIDEBAR: CARGA Y FILTROS GLOBALES (MULTI-HOJA Y MULTI-FORMATO)
+# FUNCIONES DE CARGA CON CACHÉ
+# ---------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def cargar_y_limpiar_datos(file, hoja=None):
+    if file.name.endswith(".csv"):
+        df = pd.read_csv(file)
+    else:
+        df = pd.read_excel(file, sheet_name=hoja)
+
+    df = df.drop_duplicates()
+
+    # Procesamiento estandarizado de tipos de datos
+    for col in df.columns:
+        if df[col].dtype == "object" or isinstance(df[col].dtype, pd.CategoricalDtype):
+            df[col] = df[col].fillna("Desconocido").astype(str).str.strip()
+        elif np.issubdtype(df[col].dtype, np.number):
+            df[col] = df[col].fillna(df[col].median())
+
+    return df
+
+# ---------------------------------------------------------
+# 1. SIDEBAR: CARGA DE ARCHIVOS Y FILTROS GLOBALES
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("⚙️ Configuración & Datos")
@@ -53,110 +74,88 @@ with st.sidebar:
 
     if file is not None:
         hoja_seleccionada = None
-
-        # Si es un archivo Excel con múltiples hojas
         if file.name.endswith(".xlsx") or file.name.endswith(".xls"):
             try:
                 excel_file = pd.ExcelFile(file)
                 hojas = excel_file.sheet_names
-
-                # Menú desplegable para elegir la hoja
-                hoja_seleccionada = st.selectbox(
-                    "📄 Selecciona la hoja de Excel:", options=hojas
-                )
+                hoja_seleccionada = st.selectbox("📄 Selecciona la hoja:", options=hojas)
             except Exception as e:
-                st.error(f"Error al leer las hojas del Excel: {e}")
+                st.error(f"Error al abrir Excel: {e}")
 
-        # Control de carga para actualizar cuando cambie el archivo o la hoja seleccionada
-        cache_key = f"{file.name}_{hoja_seleccionada}"
-
-        if st.session_state.get("last_loaded_key") != cache_key:
-            try:
-                if file.name.endswith(".csv"):
-                    df_cargado = pd.read_csv(file)
-                else:
-                    df_cargado = pd.read_excel(
-                        file, sheet_name=hoja_seleccionada
-                    )
-
-                df_cargado = df_cargado.drop_duplicates()
-
-                # --- PROCESAMIENTO Y LECTURA DE VARIABLES CUALITATIVAS Y CUANTITATIVAS ---
-                for col in df_cargado.columns:
-                    # Detectar y tratar variables cualitativas (texto/categorías)
-                    if df_cargado[col].dtype == "object" or isinstance(df_cargado[col].dtype, pd.CategoricalDtype):
-                        df_cargado[col] = (
-                            df_cargado[col]
-                            .fillna("Desconocido")
-                            .astype(str)
-                            .str.strip()  # Elimina espacios en blanco accidentales
-                        )
-                    # Tratamiento de variables cuantitativas
-                    elif np.issubdtype(df_cargado[col].dtype, np.number):
-                        df_cargado[col] = df_cargado[col].fillna(df_cargado[col].median())
-
-                # Guardar en session state
-                st.session_state["df_raw"] = df_cargado
-                st.session_state["last_loaded_key"] = cache_key
-                st.success("✔ Datos cargados y procesados correctamente")
-
-            except Exception as e:
-                st.error(f"Error al procesar el archivo: {e}")
+        try:
+            df_raw = cargar_y_limpiar_datos(file, hoja_seleccionada)
+            st.session_state["df_raw"] = df_raw
+            st.success("✔ Datos cargados correctamente")
+        except Exception as e:
+            st.error(f"Error al procesar el archivo: {e}")
 
     st.markdown("---")
 
-    # Selección de Módulo Principal
+    # MÓDULO DE FILTROS GLOBALES DINÁMICOS
+    df_filtrado = None
     if "df_raw" in st.session_state:
+        st.header("🌪️ Filtros Globales")
+        df_base = st.session_state["df_raw"].copy()
+        
+        cat_cols_global = df_base.select_dtypes(include=["object", "category"]).columns
+        num_cols_global = df_base.select_dtypes(include=np.number).columns
+
+        # Filtro por variable cualitativa
+        if len(cat_cols_global) > 0:
+            var_filtro_cat = st.selectbox("Filtrar por Categoría:", ["Todas"] + list(cat_cols_global))
+            if var_filtro_cat != "Todas":
+                opciones = list(df_base[var_filtro_cat].unique())
+                seleccion = st.multiselect(f"Valores de {var_filtro_cat}:", opciones, default=opciones)
+                if seleccion:
+                    df_base = df_base[df_base[var_filtro_cat].isin(seleccion)]
+
+        # Filtro por rango numérico
+        if len(num_cols_global) > 0:
+            var_filtro_num = st.selectbox("Filtrar por Rango Numérico (Opcional):", ["Ninguno"] + list(num_cols_global))
+            if var_filtro_num != "Ninguno":
+                min_val = float(df_base[var_filtro_num].min())
+                max_val = float(df_base[var_filtro_num].max())
+                rango = st.slider(f"Rango de {var_filtro_num}:", min_val, max_val, (min_val, max_val))
+                df_base = df_base[(df_base[var_filtro_num] >= rango[0]) & (df_base[var_filtro_num] <= rango[1])]
+
+        df_filtrado = df_base
+
+        st.markdown("---")
         modulo = st.radio(
             "Selecciona el Módulo",
             [
                 "📊 Dashboard",
-                "🔍 Analisis",
+                "🔍 Análisis & Perfil",
                 "🤖 Modelo Predictivo",
-                "🚨 Riesgos",
-                "🧪 Prueba de Hipótesis",
+                "🚨 Riesgos & Anomalías",
+                "🧪 Pruebas de Hipótesis",
             ],
         )
-        st.markdown("---")
 
 # ---------------------------------------------------------
 # VALIDACIÓN GLOBAL DE DATOS
 # ---------------------------------------------------------
-if "df_raw" not in st.session_state:
-    st.warning(
-        "👈 Inicia cargando una base de datos en el panel izquierdo (CSV o Excel)."
-    )
+if df_filtrado is None:
+    st.warning("👈 Inicia cargando una base de datos en el panel izquierdo (CSV o Excel).")
     st.stop()
 
-df = st.session_state["df_raw"].copy()
-
-# Clasificación precisa de variables cualitativas y cuantitativas
+df = df_filtrado.copy()
 num_cols = df.select_dtypes(include=np.number).columns
 cat_cols = df.select_dtypes(include=["object", "category"]).columns
 
 # ---------------------------------------------------------
-# KPI HEADER GLOBAL (RESUMEN EJECUTIVO PERMANENTE)
+# KPI HEADER GLOBAL PERMANENTE
 # ---------------------------------------------------------
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
 with kpi1:
-    st.metric("Total Registros", f"{len(df):,}")
-
+    st.metric("Registros Filtrados", f"{len(df):,} / {len(st.session_state['df_raw']):,}")
 with kpi2:
-    st.metric("Variables Cuantitativas", len(num_cols))
-
+    st.metric("Var. Cuantitativas", len(num_cols))
 with kpi3:
-    st.metric("Variables Cualitativas", len(cat_cols))
-
+    st.metric("Var. Cualitativas", len(cat_cols))
 with kpi4:
-    completes_score = round(
-        (1 - df.isnull().sum().sum() / (df.shape[0] * df.shape[1])) * 100, 1
-    )
-    st.metric(
-        "Completitud de Datos",
-        f"{completes_score}%",
-        delta="Excelente" if completes_score > 90 else "Atención",
-    )
+    completitud = round((1 - df.isnull().sum().sum() / (df.shape[0] * df.shape[1])) * 100, 1) if df.size > 0 else 0
+    st.metric("Calidad de Datos", f"{completitud}%", delta="Excelente" if completitud > 90 else "Atención")
 
 st.markdown("---")
 
@@ -173,21 +172,18 @@ if modulo == "📊 Dashboard":
 
         with col_left:
             if len(num_cols) > 0:
-                var_sel = st.selectbox(
-                    "Métrica Principal de Negocio", num_cols, key="dash_main"
-                )
-
+                var_sel = st.selectbox("Métrica Principal de Negocio", num_cols, key="dash_main")
                 fig_hist = px.histogram(
                     df,
                     x=var_sel,
                     title=f"Distribución General de {var_sel}",
                     marginal="box",
-                    color_discrete_sequence=["#45c7e7"],
+                    color_discrete_sequence=["#0066cc"],
                 )
                 fig_hist.update_layout(template="plotly_white")
                 st.plotly_chart(fig_hist, use_container_width=True)
             else:
-                st.info("No hay variables numéricas para graficar en esta sección.")
+                st.info("No hay variables numéricas en el dataset filtrado.")
 
         with col_right:
             st.markdown("#### 💡 Insights Automáticos")
@@ -200,25 +196,17 @@ if modulo == "📊 Dashboard":
                 st.write(f"* **Mediana:** `{median_val:.2f}`")
                 st.write(f"* **Desviación Estándar:** `{std_val:.2f}`")
 
-                if abs(mean_val - median_val) > (std_val * 0.2):
-                    st.warning(
-                        "⚠️ La distribución presenta sesgo significativo. Se recomienda usar la mediana como medida principal."
-                    )
+                if abs(mean_val - median_val) > (std_val * 0.2 if std_val > 0 else 0):
+                    st.warning("⚠️ La distribución presenta sesgo. Se sugiere la mediana como indicador estable.")
                 else:
-                    st.success(
-                        "✅ La distribución es relativamente simétrica."
-                    )
+                    st.success("✅ La distribución es simétrica.")
 
     with tab2:
         if len(num_cols) >= 2:
             col_x, col_y, col_c = st.columns(3)
             var_x = col_x.selectbox("Eje X", num_cols, index=0)
-            var_y = col_y.selectbox(
-                "Eje Y", num_cols, index=min(1, len(num_cols) - 1)
-            )
-            var_c = col_c.selectbox(
-                "Color por Variable Cualitativa (Opcional)", ["Ninguna"] + list(cat_cols)
-            )
+            var_y = col_y.selectbox("Eje Y", num_cols, index=min(1, len(num_cols) - 1))
+            var_c = col_c.selectbox("Color por Var. Cualitativa", ["Ninguna"] + list(cat_cols))
 
             color_arg = None if var_c == "Ninguna" else var_c
             fig_scatter = px.scatter(
@@ -232,13 +220,13 @@ if modulo == "📊 Dashboard":
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
         else:
-            st.warning("Se requieren al menos 2 variables numéricas para el gráfico de dispersión.")
+            st.warning("Se requieren al menos 2 variables numéricas.")
 
 # ---------------------------------------------------------
-# MÓDULO 2: DIAGNOSTICS & PROFILING
+# MÓDULO 2: DIAGNÓSTICO Y PERFILADO
 # ---------------------------------------------------------
-elif modulo == "🔍 Analisis":
-    st.subheader("🔍 Diagnóstico Estadístico y Calidad de la Base de Datos")
+elif modulo == "🔍 Análisis & Perfil":
+    st.subheader("🔍 Diagnóstico Estadístico y Perfil de Datos")
 
     tab_prof1, tab_prof2, tab_prof3 = st.tabs(
         ["🔗 Correlaciones", "📊 Perfil Cuantitativo", "🏷️ Perfil Cualitativo"]
@@ -246,11 +234,7 @@ elif modulo == "🔍 Analisis":
 
     with tab_prof1:
         if len(num_cols) >= 2:
-            method = st.radio(
-                "Método de Correlación",
-                ["pearson", "spearman"],
-                horizontal=True,
-            )
+            method = st.radio("Método de Correlación", ["pearson", "spearman"], horizontal=True)
             corr = df[num_cols].corr(method=method)
 
             fig_corr = px.imshow(
@@ -263,24 +247,20 @@ elif modulo == "🔍 Analisis":
             fig_corr.update_layout(template="plotly_white")
             st.plotly_chart(fig_corr, use_container_width=True)
         else:
-            st.warning("Se requieren más columnas numéricas.")
+            st.warning("Se necesitan más columnas numéricas.")
 
     with tab_prof2:
-        st.write("#### Tabla de Descriptores Estadísticos Avanzados (Numéricos)")
+        st.write("#### Descriptores Estadísticos Avanzados (Cuantitativos)")
         if len(num_cols) > 0:
             stats_df = df[num_cols].describe().T
             stats_df["skewness"] = df[num_cols].skew()
             stats_df["kurtosis"] = df[num_cols].kurt()
-            st.dataframe(
-                stats_df.style.background_gradient(
-                    cmap="Blues", subset=["mean", "std"]
-                )
-            )
+            st.dataframe(stats_df.style.background_gradient(cmap="Blues", subset=["mean", "std"]))
 
     with tab_prof3:
-        st.write("#### Frecuencia de Variables Cualitativas / Categóricas")
+        st.write("#### Distribución de Variables Cualitativas")
         if len(cat_cols) > 0:
-            var_cat_sel = st.selectbox("Selecciona la Variable Cualitativa:", cat_cols)
+            var_cat_sel = st.selectbox("Selecciona Variable Cualitativa:", cat_cols)
             freq_df = df[var_cat_sel].value_counts().reset_index()
             freq_df.columns = [var_cat_sel, "Frecuencia"]
             freq_df["Porcentaje (%)"] = round((freq_df["Frecuencia"] / len(df)) * 100, 2)
@@ -299,13 +279,13 @@ elif modulo == "🔍 Analisis":
                 )
                 st.plotly_chart(fig_cat, use_container_width=True)
         else:
-            st.info("No se encontraron variables cualitativas en esta base de datos.")
+            st.info("No se encontraron variables cualitativas.")
 
 # ---------------------------------------------------------
-# MÓDULO 3: PREDICTIVE ENGINE (IA CON SOPORTE CUALITATIVO)
+# MÓDULO 3: PREDICTIVE ENGINE CON EVALUACIÓN COMPLETA
 # ---------------------------------------------------------
 elif modulo == "🤖 Modelo Predictivo":
-    st.subheader("🤖 Modelado Predictivo Basado en Machine Learning")
+    st.subheader("🤖 Modelado Predictivo de Machine Learning")
 
     col_config, col_results = st.columns([1, 2])
 
@@ -314,26 +294,23 @@ elif modulo == "🤖 Modelo Predictivo":
         target_var = st.selectbox("Variable Objetivo (Target)", df.columns)
         test_size = st.slider("Proporción de Test (%)", 10, 40, 20) / 100
 
-        btn_train = st.button(
-            "🚀 Entrenar y Evaluar Modelo", use_container_width=True
-        )
+        btn_train = st.button("🚀 Entrenar Modelo", use_container_width=True)
 
     with col_results:
         if btn_train:
             df_ml = df.copy()
 
-            # Detectar si la variable objetivo es cualitativa o categórica discreta
+            # Detección del tipo de tarea (Clasificación vs Regresión)
             is_class = (
                 df_ml[target_var].dtype == "object"
                 or isinstance(df_ml[target_var].dtype, pd.CategoricalDtype)
                 or df_ml[target_var].nunique() < 10
             )
 
+            le_target = None
             if is_class:
                 le_target = LabelEncoder()
-                df_ml[target_var] = le_target.fit_transform(
-                    df_ml[target_var].astype(str)
-                )
+                df_ml[target_var] = le_target.fit_transform(df_ml[target_var].astype(str))
                 model_type = "Clasificación (Random Forest Classifier)"
             else:
                 model_type = "Regresión (Random Forest Regressor)"
@@ -341,7 +318,7 @@ elif modulo == "🤖 Modelo Predictivo":
             X = df_ml.drop(columns=[target_var])
             y = df_ml[target_var]
 
-            # Codificar automáticamente todas las variables cualitativas de entrada (Features)
+            # Codificación automática de características cualitativas
             for c in X.columns:
                 if X[c].dtype == "object" or isinstance(X[c].dtype, pd.CategoricalDtype):
                     X[c] = LabelEncoder().fit_transform(X[c].astype(str))
@@ -351,74 +328,86 @@ elif modulo == "🤖 Modelo Predictivo":
             )
 
             if is_class:
-                model = RandomForestClassifier(
-                    n_estimators=100, random_state=42
-                )
+                model = RandomForestClassifier(n_estimators=100, random_state=42)
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
+
                 acc = accuracy_score(y_test, preds)
+                st.success(f"**Modelo de {model_type}**")
+                st.metric("Precisión (Accuracy)", f"{acc*100:.2f}%")
 
-                st.success(f"**Tipo de Modelo:** {model_type}")
-                st.metric("Precisión Global (Accuracy)", f"{acc*100:.2f}%")
-            else:
-                model = RandomForestRegressor(
-                    n_estimators=100, random_state=42
+                # Matriz de Confusión
+                st.write("#### 🎯 Matriz de Confusión")
+                cm = confusion_matrix(y_test, preds)
+                labels = le_target.classes_ if le_target else np.unique(y)
+                fig_cm = px.imshow(
+                    cm,
+                    x=labels,
+                    y=labels,
+                    text_auto=True,
+                    labels=dict(x="Predicción", y="Real"),
+                    color_continuous_scale="Blues",
                 )
+                st.plotly_chart(fig_cm, use_container_width=True)
+
+            else:
+                model = RandomForestRegressor(n_estimators=100, random_state=42)
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
-                r2 = r2_score(y_test, preds)
 
-                st.success(f"**Tipo de Modelo:** {model_type}")
-                st.metric("Coeficiente de Determinación (R²)", f"{r2:.3f}")
+                r2 = r2_score(y_test, preds)
+                st.success(f"**Modelo de {model_type}**")
+                st.metric("Coeficiente $R^2$", f"{r2:.3f}")
 
             # Importancia de Variables
-            importances = pd.Series(
-                model.feature_importances_, index=X.columns
-            ).sort_values(ascending=True)
+            importances = pd.Series(model.feature_importances_, index=X.columns).sort_values(ascending=True)
             fig_imp = px.bar(
                 importances,
                 orientation="h",
-                title="Importancia Relativa de las Variables (Feature Importance)",
-                labels={"value": "Importancia", "index": "Variable"},
+                title="Importancia Relativa de las Variables",
                 template="plotly_white",
             )
             st.plotly_chart(fig_imp, use_container_width=True)
 
 # ---------------------------------------------------------
-# MÓDULO 4: RISK & ANOMALIES
+# MÓDULO 4: RIESGOS, ANOMALÍAS Y EXPORTACIÓN
 # ---------------------------------------------------------
-elif modulo == "🚨 Riesgos":
+elif modulo == "🚨 Riesgos & Anomalías":
     st.subheader("🚨 Detección de Riesgos, Anomalías y Segmentación")
 
-    tab_risk1, tab_risk2 = st.tabs(
-        ["⚠️ Isolation Forest (Anomalías)", "🎯 K-Means Clustering"]
-    )
+    tab_risk1, tab_risk2 = st.tabs(["⚠️ Detección de Anomalías", "🎯 Segmentación (K-Means)"])
 
     with tab_risk1:
         if len(num_cols) > 0:
-            contam = st.slider(
-                "Sensibilidad de Detección de Anomalías", 0.01, 0.15, 0.05
-            )
+            contam = st.slider("Sensibilidad de Detección (%)", 1, 15, 5) / 100
 
             scaler = StandardScaler()
             scaled_num = scaler.fit_transform(df[num_cols])
 
             iso = IsolationForest(contamination=contam, random_state=42)
-            df["Anomaly"] = iso.fit_predict(scaled_num)
+            df["Es_Anomalia"] = iso.fit_predict(scaled_num)
+            df["Es_Anomalia"] = df["Es_Anomalia"].map({1: "Normal", -1: "Atípico"})
 
-            anomalies_cnt = sum(df["Anomaly"] == -1)
-            st.error(
-                f"Se han identificado **{anomalies_cnt}** registros anómalos o atípicos de un total de {len(df)}."
+            num_anom = (df["Es_Anomalia"] == "Atípico").sum()
+            st.error(f"Se identificaron **{num_anom}** registros anómalos o atípicos de **{len(df)}** datos.")
+
+            df_anomalias = df[df["Es_Anomalia"] == "Atípico"]
+            st.dataframe(df_anomalias.head(10))
+
+            # Exportar datos anómalos
+            csv_data = df_anomalias.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Descargar Lista de Anomalías (CSV)",
+                data=csv_data,
+                file_name="reporte_anomalias.csv",
+                mime="text/csv",
             )
-
-            st.write("#### Registros Atípicos Detectados")
-            st.dataframe(df[df["Anomaly"] == -1].head(10))
         else:
-            st.warning("Se requieren variables numéricas para la detección de anomalías.")
+            st.warning("Se requieren variables numéricas.")
 
     with tab_risk2:
         if len(num_cols) >= 2:
-            k_val = st.slider("Número de Segmentos (Clusters K)", 2, 8, 3)
+            k_val = st.slider("Número de Segmentos (Clusters)", 2, 8, 3)
 
             scaler = StandardScaler()
             scaled_num = scaler.fit_transform(df[num_cols])
@@ -437,55 +426,79 @@ elif modulo == "🚨 Riesgos":
             )
             st.plotly_chart(fig_cls, use_container_width=True)
         else:
-            st.warning("Se requieren al menos 2 variables numéricas para la segmentación K-Means.")
+            st.warning("Se requieren al menos 2 variables numéricas.")
 
 # ---------------------------------------------------------
-# MÓDULO 5: HYPOTHESIS TESTING
+# MÓDULO 5: PRUEBAS DE HIPÓTESIS (ANOVA Y CHI-CUADRADO)
 # ---------------------------------------------------------
-elif modulo == "🧪 Prueba de Hipótesis":
+elif modulo == "🧪 Pruebas de Hipótesis":
     st.subheader("🧪 Inferencia Estadística y Pruebas de Hipótesis")
 
-    if len(cat_cols) > 0 and len(num_cols) > 0:
-        col_g, col_m = st.columns(2)
-        group_var = col_g.selectbox("Variable Cualitativa (Factor / Grupo)", cat_cols)
-        metric_var = col_m.selectbox("Variable Cuantitativa (Respuesta)", num_cols)
+    tipo_prueba = st.radio(
+        "Selecciona el tipo de evaluación:",
+        ["Cualitativa vs Cuantitativa (ANOVA)", "Cualitativa vs Cualitativa (Chi-Cuadrado $\\chi^2$)"],
+        horizontal=True,
+    )
 
-        groups = [
-            g[metric_var].values
-            for _, g in df.groupby(group_var)
-            if len(g) > 1
-        ]
+    # ANOVA
+    if tipo_prueba == "Cualitativa vs Cuantitativa (ANOVA)":
+        if len(cat_cols) > 0 and len(num_cols) > 0:
+            col_g, col_m = st.columns(2)
+            group_var = col_g.selectbox("Variable Cualitativa (Grupo)", cat_cols)
+            metric_var = col_m.selectbox("Variable Cuantitativa (Respuesta)", num_cols)
 
-        if len(groups) >= 2:
-            f_stat, p_val = stats.f_oneway(*groups)
+            groups = [g[metric_var].values for _, g in df.groupby(group_var) if len(g) > 1]
 
-            st.markdown("### Resultados de la Prueba ANOVA")
-            res_col1, res_col2 = st.columns(2)
-            res_col1.metric("Estadístico F", f"{f_stat:.3f}")
-            res_col2.metric("P-Valor (p-value)", f"{p_val:.5f}")
+            if len(groups) >= 2:
+                f_stat, p_val = stats.f_oneway(*groups)
 
-            if p_val < 0.05:
-                st.success(
-                    "🟢 **Rechazo de Hipótesis Nula ($H_0$):** Existe diferencia estadísticamente significativa entre las categorías cualitativas analizadas ($p < 0.05$)."
-                )
-            else:
-                st.warning(
-                    "🟡 **No se rechaza $H_0$:** No hay suficiente evidencia empírica para afirmar que existe diferencia entre las categorías ($p \ge 0.05$)."
-                )
+                st.markdown("### Resultados ANOVA")
+                c1, c2 = st.columns(2)
+                c1.metric("Estadístico F", f"{f_stat:.3f}")
+                c2.metric("P-Valor", f"{p_val:.5f}")
 
-            fig_box = px.box(
-                df,
-                x=group_var,
-                y=metric_var,
-                title=f"Comparativa de {metric_var} por la variable cualitativa {group_var}",
-                template="plotly_white",
-            )
-            st.plotly_chart(fig_box, use_container_width=True)
+                if p_val < 0.05:
+                    st.success("🟢 **Diferencia Significativa:** Existen diferencias reales entre los grupos ($p < 0.05$).")
+                else:
+                    st.warning("🟡 **Sin Diferencia Significativa:** No hay evidencia para afirmar diferencias ($p \\ge 0.05$).")
+
+                fig_box = px.box(df, x=group_var, y=metric_var, template="plotly_white")
+                st.plotly_chart(fig_box, use_container_width=True)
         else:
-            st.warning("La variable cualitativa seleccionada debe tener al menos 2 categorías con datos suficientes.")
+            st.warning("Se requiere al menos 1 variable cualitativa y 1 cuantitativa.")
+
+    # CHI-CUADRADO
     else:
-        st.warning(
-            "Se requiere al menos una variable cualitativa y una cuantitativa."
-        )
-        
+        if len(cat_cols) >= 2:
+            col_c1, col_c2 = st.columns(2)
+            cat_var1 = col_c1.selectbox("Primera Variable Cualitativa:", cat_cols, index=0)
+            cat_var2 = col_c2.selectbox("Segunda Variable Cualitativa:", cat_cols, index=min(1, len(cat_cols) - 1))
+
+            if cat_var1 != cat_var2:
+                contingency_table = pd.crosstab(df[cat_var1], df[cat_var2])
+                chi2, p_val, dof, _ = stats.chi2_contingency(contingency_table)
+
+                st.markdown("### Resultados de la Prueba Chi-Cuadrado ($\chi^2$)")
+                rc1, rc2, rc3 = st.columns(3)
+                rc1.metric("Estadístico $\chi^2$", f"{chi2:.3f}")
+                rc2.metric("P-Valor", f"{p_val:.5f}")
+                rc3.metric("Grados de Libertad", dof)
+
+                if p_val < 0.05:
+                    st.success("🟢 **Variables Dependientes:** Existe una relación estadísticamente significativa entre ambas variables ($p < 0.05$).")
+                else:
+                    st.warning("🟡 **Variables Independientes:** No existe evidencia suficiente de asociación ($p \\ge 0.05$).")
+
+                st.write("#### Tabla de Contingencia (Frecuencias Observadas)")
+                fig_chi = px.imshow(
+                    contingency_table,
+                    text_auto=True,
+                    color_continuous_scale="Blues",
+                    title=f"Asociación entre {cat_var1} y {cat_var2}",
+                )
+                st.plotly_chart(fig_chi, use_container_width=True)
+            else:
+                st.warning("Selecciona dos variables cualitativas diferentes.")
+        else:
+            st.warning("Se necesitan al menos 2 variables cualitativas en la base de datos.")
         
