@@ -39,7 +39,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("🛡️ Plataforma Avanzada de Análisis de Datos")
+st.title("🛡️ Plataforma de Análisis de Datos")
 st.caption(
     "Sistema Integral de Analítica, Diagnóstico Prescriptivo, Riesgos e Inferencia Estadística"
 )
