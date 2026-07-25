@@ -15,7 +15,7 @@ import streamlit as st
 # CONFIGURACIÓN DE PÁGINA Y ESTILO
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Plataforma de Análisis de Datos",
+    page_title="Plataforma Avanzada de Análisis de Datos",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -34,12 +34,21 @@ st.markdown(
     .stApp {
         background-color: #fcfcfc;
     }
+    .explanation-box {
+        background-color: #eef6ff;
+        border-left: 4px solid #0284c7;
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-top: 10px;
+        margin-bottom: 15px;
+        font-size: 0.95rem;
+    }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-st.title("🛡️ Plataforma de Análisis de Datos")
+st.title("🛡️ Plataforma Avanzada de Análisis de Datos")
 st.caption(
     "Sistema Integral de Analítica, Diagnóstico Prescriptivo, Riesgos e Inferencia Estadística"
 )
@@ -182,6 +191,15 @@ if modulo == "📊 Dashboard":
                 )
                 fig_hist.update_layout(template="plotly_white")
                 st.plotly_chart(fig_hist, use_container_width=True)
+
+                st.markdown(
+                    f"""<div class="explanation-box">
+                    💡 <b>¿Qué significa este gráfico?</b><br>
+                    Este gráfico muestra la frecuencia con la que ocurren distintos valores de <b>{var_sel}</b>. 
+                    El centro de la caja superior marca el valor típico (mediana), mientras que los puntos extremos representan valores inusualmente altos o bajos.
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
             else:
                 st.info("No hay variables numéricas en el dataset filtrado.")
 
@@ -198,8 +216,20 @@ if modulo == "📊 Dashboard":
 
                 if abs(mean_val - median_val) > (std_val * 0.2 if std_val > 0 else 0):
                     st.warning("⚠️ La distribución presenta sesgo. Se sugiere la mediana como indicador estable.")
+                    st.markdown(
+                        """<div class="explanation-box">
+                        <b>Explicación:</b> El promedio está siendo arrastrado por valores extremos (muy altos o muy bajos). La <b>mediana</b> representa mejor el comportamiento real del grupo.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.success("✅ La distribución es simétrica.")
+                    st.markdown(
+                        """<div class="explanation-box">
+                        <b>Explicación:</b> Los datos están equilibrados alrededor del centro. Tanto el promedio como la mediana son confiables para tomar decisiones.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
 
     with tab2:
         if len(num_cols) >= 2:
@@ -219,6 +249,17 @@ if modulo == "📊 Dashboard":
                 trendline="ols" if var_c == "Ninguna" else None,
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
+
+            st.markdown(
+                f"""<div class="explanation-box">
+                💡 <b>¿Cómo interpretar este gráfico de dispersión?</b><br>
+                Cada punto representa un registro de tu base de datos.<br>
+                • <b>Si los puntos suben hacia la derecha:</b> Cuando aumenta <b>{var_x}</b>, también tiende a aumentar <b>{var_y}</b>.<br>
+                • <b>Si los puntos bajan hacia la derecha:</b> Cuando aumenta <b>{var_x}</b>, disminuye <b>{var_y}</b>.<br>
+                • <b>Si están dispersos sin forma:</b> No hay una relación directa evidente entre ambas variables.
+                </div>""",
+                unsafe_allow_html=True,
+            )
         else:
             st.warning("Se requieren al menos 2 variables numéricas.")
 
@@ -246,6 +287,17 @@ elif modulo == "🔍 Análisis & Perfil":
             )
             fig_corr.update_layout(template="plotly_white")
             st.plotly_chart(fig_corr, use_container_width=True)
+
+            st.markdown(
+                """<div class="explanation-box">
+                💡 <b>¿Cómo leer la Matriz de Correlaciones?</b><br>
+                Mide qué tan conectadas están dos variables en una escala de <b>-1.0 a +1.0</b>:<br>
+                • <b>Cercano a +1.0 (Azul Oscuro):</b> Relación fuerte positiva (ambas crecen juntas).<br>
+                • <b>Cercano a 0.0 (Claro):</b> Independientes (lo que le pase a una no afecta a la otra).<br>
+                • <b>Cercano a -1.0:</b> Relación inversa (cuando una sube, la otra baja).
+                </div>""",
+                unsafe_allow_html=True,
+            )
         else:
             st.warning("Se necesitan más columnas numéricas.")
 
@@ -256,6 +308,16 @@ elif modulo == "🔍 Análisis & Perfil":
             stats_df["skewness"] = df[num_cols].skew()
             stats_df["kurtosis"] = df[num_cols].kurt()
             st.dataframe(stats_df.style.background_gradient(cmap="Blues", subset=["mean", "std"]))
+
+            st.markdown(
+                """<div class="explanation-box">
+                💡 <b>Guía rápida de columnas:</b><br>
+                • <b>mean / std:</b> Promedio y nivel de variabilidad (desviación).<br>
+                • <b>min / max:</b> Los valores límite registrados.<br>
+                • <b>skewness (sesgo):</b> Si es mayor a 1 o menor a -1, la mayoría de los datos se concentran en un extremo.
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
     with tab_prof3:
         st.write("#### Distribución de Variables Cualitativas")
@@ -278,13 +340,20 @@ elif modulo == "🔍 Análisis & Perfil":
                     text_auto=True,
                 )
                 st.plotly_chart(fig_cat, use_container_width=True)
+
+            st.markdown(
+                f"""<div class="explanation-box">
+                💡 <b>¿Qué muestra este desglose?</b><br>
+                Indica la participación de cada grupo dentro de <b>{var_cat_sel}</b>. Permite identificar de un vistazo las categorías dominantes y las que tienen baja participación.
+                </div>""",
+                unsafe_allow_html=True,
+            )
         else:
             st.info("No se encontraron variables cualitativas.")
 
 # ---------------------------------------------------------
-# MÓDULO 3: PREDICTIVE ENGINE CON EVALUACIÓN COMPLETA
+# MÓDULO 3: PREDICTIVE ENGINE CON EXPLICACIÓN
 # ---------------------------------------------------------
-
 elif modulo == "🤖 Modelo Predictivo":
     st.subheader("🤖 Modelado Predictivo de Machine Learning")
 
@@ -293,7 +362,6 @@ elif modulo == "🤖 Modelo Predictivo":
     with col_config:
         st.markdown("#### Configuración del Modelo")
         
-        # Filtrar columnas que no sean identificadores únicos (IDs / Nombres de cliente)
         posibles_targets = [
             c for c in df.columns if df[c].nunique() < (len(df) * 0.8) or np.issubdtype(df[c].dtype, np.number)
         ]
@@ -310,12 +378,10 @@ elif modulo == "🤖 Modelo Predictivo":
         if btn_train:
             df_ml = df.copy()
 
-            # Advertencia si la variable tiene demasiadas categorías
             if df_ml[target_var].nunique() > 50 and (df_ml[target_var].dtype == "object" or isinstance(df_ml[target_var].dtype, pd.CategoricalDtype)):
-                st.error("⚠️ La variable seleccionada tiene demasiadas categorías únicas (es probable que sea un ID o Nombre). Selecciona una variable con menos categorías.")
+                st.error("⚠️ La variable seleccionada tiene demasiadas categorías únicas. Selecciona una variable agrupadora (ej. Segmento, Estado, Tipo de Cliente).")
                 st.stop()
 
-            # Detección del tipo de tarea
             is_class = (
                 df_ml[target_var].dtype == "object"
                 or isinstance(df_ml[target_var].dtype, pd.CategoricalDtype)
@@ -333,7 +399,6 @@ elif modulo == "🤖 Modelo Predictivo":
             X = df_ml.drop(columns=[target_var])
             y = df_ml[target_var]
 
-            # Codificación automática de características cualitativas
             for c in X.columns:
                 if X[c].dtype == "object" or isinstance(X[c].dtype, pd.CategoricalDtype):
                     X[c] = LabelEncoder().fit_transform(X[c].astype(str))
@@ -351,11 +416,18 @@ elif modulo == "🤖 Modelo Predictivo":
                 st.success(f"**Modelo de {model_type}**")
                 st.metric("Precisión (Accuracy)", f"{acc*100:.2f}%")
 
-                # Matriz de Confusión Segura
+                st.markdown(
+                    f"""<div class="explanation-box">
+                    💡 <b>¿Qué significa esta Precisión del {acc*100:.1f}%?</b><br>
+                    Indica el porcentaje de veces que el modelo acertó la categoría correcta en datos totalmente nuevos. 
+                    Un valor superior al <b>75%</b> se considera confiable para toma de decisiones.
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
                 st.write("#### 🎯 Matriz de Confusión")
                 cm = confusion_matrix(y_test, preds)
                 
-                # Obtener etiquetas dinámicas seguras para evitar errores de dimensión
                 unique_labels_encoded = np.unique(np.concatenate((y_test, preds)))
                 if le_target is not None:
                     labels_str = le_target.inverse_transform(unique_labels_encoded)
@@ -367,11 +439,20 @@ elif modulo == "🤖 Modelo Predictivo":
                     x=labels_str,
                     y=labels_str,
                     text_auto=True,
-                    labels=dict(x="Predicción", y="Valor Real"),
+                    labels=dict(x="Predicción del Modelo", y="Valor Real"),
                     color_continuous_scale="Blues",
                     template="plotly_white"
                 )
                 st.plotly_chart(fig_cm, use_container_width=True)
+
+                st.markdown(
+                    """<div class="explanation-box">
+                    💡 <b>¿Cómo entender la Matriz de Confusión?</b><br>
+                    • Los números en la <b>diagonal principal (de arriba-izquierda a abajo-derecha)</b> representan los aciertos exactos del modelo.<br>
+                    • Las casillas fuera de la diagonal muestran en qué categorías el modelo se confundió.
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
             else:
                 model = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -380,9 +461,19 @@ elif modulo == "🤖 Modelo Predictivo":
 
                 r2 = r2_score(y_test, preds)
                 st.success(f"**Modelo de {model_type}**")
-                st.metric("Coeficiente $R^2$", f"{r2:.3f}")
+                st.metric("Coeficiente R²", f"{r2:.3f}")
 
-            # Importancia de Variables
+                st.markdown(
+                    f"""<div class="explanation-box">
+                    💡 <b>¿Qué significa un R² de {r2:.3f}?</b><br>
+                    Mide la capacidad del modelo para explicar los cambios en <b>{target_var}</b>:<br>
+                    • <b>Cercano a 1.0 (100%):</b> El modelo predice casi perfectamente el valor numérico.<br>
+                    • <b>Mayor a 0.70:</b> Excelente capacidad predictiva.<br>
+                    • <b>Menor a 0.40:</b> Se necesitan más o mejores datos para predecir esta variable.
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
             importances = pd.Series(model.feature_importances_, index=X.columns).sort_values(ascending=True)
             fig_imp = px.bar(
                 importances,
@@ -392,8 +483,16 @@ elif modulo == "🤖 Modelo Predictivo":
             )
             st.plotly_chart(fig_imp, use_container_width=True)
 
+            st.markdown(
+                f"""<div class="explanation-box">
+                💡 <b>¿Qué revela este gráfico de importancia?</b><br>
+                La barra más larga superior (<b>{importances.index[-1]}</b>) es la variable que más influye para determinar el resultado final de <b>{target_var}</b>. Las variables con barras muy cortas casi no influyen en la predicción.
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
 # ---------------------------------------------------------
-# MÓDULO 4: RIESGOS, ANOMALÍAS Y EXPORTACIÓN
+# MÓDULO 4: RIESGOS Y ANOMALÍAS CON EXPLICACIÓN
 # ---------------------------------------------------------
 elif modulo == "🚨 Riesgos & Anomalías":
     st.subheader("🚨 Detección de Riesgos, Anomalías y Segmentación")
@@ -417,7 +516,14 @@ elif modulo == "🚨 Riesgos & Anomalías":
             df_anomalias = df[df["Es_Anomalia"] == "Atípico"]
             st.dataframe(df_anomalias.head(10))
 
-            # Exportar datos anómalos
+            st.markdown(
+                f"""<div class="explanation-box">
+                💡 <b>¿Qué es un registro atípico / anómalo?</b><br>
+                Son filas en tu base de datos cuyo comportamiento combinado se aleja drásticamente del patrón del grupo (pueden ser posibles errores de digitación, fraudes, o casos extraordinarios de negocio que requieren auditoría).
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
             csv_data = df_anomalias.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "📥 Descargar Lista de Anomalías (CSV)",
@@ -448,11 +554,19 @@ elif modulo == "🚨 Riesgos & Anomalías":
                 template="plotly_white",
             )
             st.plotly_chart(fig_cls, use_container_width=True)
+
+            st.markdown(
+                f"""<div class="explanation-box">
+                💡 <b>¿Qué significa esta segmentación?</b><br>
+                El algoritmo ha agrupado automáticamente tus registros en <b>{k_val} grupos (clusters)</b> con características similares. Puedes utilizar estos grupos para estrategias diferenciadas (ej. Clientes Premium vs Estándar).
+                </div>""",
+                unsafe_allow_html=True,
+            )
         else:
             st.warning("Se requieren al menos 2 variables numéricas.")
 
 # ---------------------------------------------------------
-# MÓDULO 5: PRUEBAS DE HIPÓTESIS (ANOVA Y CHI-CUADRADO)
+# MÓDULO 5: PRUEBAS DE HIPÓTESIS CON EXPLICACIÓN
 # ---------------------------------------------------------
 elif modulo == "🧪 Pruebas de Hipótesis":
     st.subheader("🧪 Inferencia Estadística y Pruebas de Hipótesis")
@@ -481,9 +595,23 @@ elif modulo == "🧪 Pruebas de Hipótesis":
                 c2.metric("P-Valor", f"{p_val:.5f}")
 
                 if p_val < 0.05:
-                    st.success("🟢 **Diferencia Significativa:** Existen diferencias reales entre los grupos ($p < 0.05$).")
+                    st.success("🟢 **Diferencia Significativa Encontrada**")
+                    st.markdown(
+                        f"""<div class="explanation-box">
+                        💡 <b>Conclusión Práctica (p-valor = {p_val:.5f} < 0.05):</b><br>
+                        Existe una diferencia real y estadísticamente comprobada en el promedio de <b>{metric_var}</b> entre las distintas categorías de <b>{group_var}</b>. La diferencia no es casualidad ni azar.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.warning("🟡 **Sin Diferencia Significativa:** No hay evidencia para afirmar diferencias ($p \\ge 0.05$).")
+                    st.warning("🟡 **Sin Diferencia Significativa**")
+                    st.markdown(
+                        f"""<div class="explanation-box">
+                        💡 <b>Conclusión Práctica (p-valor = {p_val:.5f} ≥ 0.05):</b><br>
+                        No hay suficiente evidencia estadística para afirmar que las categorías de <b>{group_var}</b> influyan en el resultado promedio de <b>{metric_var}</b>. Todos los grupos se comportan de forma similar.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
 
                 fig_box = px.box(df, x=group_var, y=metric_var, template="plotly_white")
                 st.plotly_chart(fig_box, use_container_width=True)
@@ -501,18 +629,31 @@ elif modulo == "🧪 Pruebas de Hipótesis":
                 contingency_table = pd.crosstab(df[cat_var1], df[cat_var2])
                 chi2, p_val, dof, _ = stats.chi2_contingency(contingency_table)
 
-                st.markdown("### Resultados de la Prueba Chi-Cuadrado ($\chi^2$)")
+                st.markdown("### Resultados Chi-Cuadrado ($\chi^2$)")
                 rc1, rc2, rc3 = st.columns(3)
                 rc1.metric("Estadístico $\chi^2$", f"{chi2:.3f}")
                 rc2.metric("P-Valor", f"{p_val:.5f}")
                 rc3.metric("Grados de Libertad", dof)
 
                 if p_val < 0.05:
-                    st.success("🟢 **Variables Dependientes:** Existe una relación estadísticamente significativa entre ambas variables ($p < 0.05$).")
+                    st.success("🟢 **Existe Asociación Significativa**")
+                    st.markdown(
+                        f"""<div class="explanation-box">
+                        💡 <b>Conclusión Práctica (p-valor = {p_val:.5f} < 0.05):</b><br>
+                        Las variables <b>{cat_var1}</b> y <b>{cat_var2}</b> están estrechamente relacionadas. Pertenecer a una categoría específica sí afecta la probabilidad de pertenecer a la otra.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.warning("🟡 **Variables Independientes:** No existe evidencia suficiente de asociación ($p \\ge 0.05$).")
+                    st.warning("🟡 **Variables Independientes**")
+                    st.markdown(
+                        f"""<div class="explanation-box">
+                        💡 <b>Conclusión Práctica (p-valor = {p_val:.5f} ≥ 0.05):</b><br>
+                        <b>{cat_var1}</b> y <b>{cat_var2}</b> son independientes. Saber la categoría de una no te ayuda a predecir la otra.
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
 
-                st.write("#### Tabla de Contingencia (Frecuencias Observadas)")
                 fig_chi = px.imshow(
                     contingency_table,
                     text_auto=True,
@@ -524,4 +665,3 @@ elif modulo == "🧪 Pruebas de Hipótesis":
                 st.warning("Selecciona dos variables cualitativas diferentes.")
         else:
             st.warning("Se necesitan al menos 2 variables cualitativas en la base de datos.")
-        
